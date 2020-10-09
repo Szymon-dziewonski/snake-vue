@@ -1,5 +1,6 @@
 <template>
-  <div :class="$style['tile-wrapper']" @keydown="keyPress">
+  <button @click="onStartGame()" v-if="!hideButton">Start Game</button>
+  <div :class="$style['tile-wrapper']" @keydown="keyPress" v-if="startGame">
     <template v-for="y in noTiles">
       <div
         v-for="x in noTiles"
@@ -8,9 +9,7 @@
         :class="[
           $style['tile'],
           {
-            [$style['tile--snake']]:
-              (x === snakeCoords[0] && y === snakeCoords[1]) ||
-              tileCoords(x, y),
+            [$style['tile--snake']]: isSnake(x, y),
           },
           {
             [$style['tile--apple']]:
@@ -20,6 +19,7 @@
       ></div>
     </template>
   </div>
+  <div v-if="gameOver">Game OVER loseeerr</div>
 </template>
 
 <script lang="ts">
@@ -28,84 +28,98 @@ export default {
   data() {
     return {
       noTiles: 20,
-      tile: [],
       velocity: [-1, 0],
-      snakeCoords: [10, 10],
+      prevVelocity: [],
+      snakeCoords: [[10, 10]],
       appleCoords: [],
-      path: []
+      path: [],
+      isAppleEaten: false,
+      startGame: false,
+      gameOver: false,
+      hideButton: false
     };
   },
   mounted() {
+    this.velocity = [-1, 0];
     window.addEventListener("keydown", e => {
       switch (e.keyCode) {
         case 37:
-          if (this.velocity[0] === 1) return;
+          if (this.prevVelocity[0] === 1) return;
           this.velocity = [-1, 0];
           break;
         case 38:
-          if (this.velocity[1] === 1) return;
+          if (this.prevVelocity[1] === 1) return;
           this.velocity = [0, -1];
           break;
         case 39:
-          if (this.velocity[0] === -1) return;
+          if (this.prevVelocity[0] === -1) return;
           this.velocity = [1, 0];
           break;
         case 40:
-          if (this.velocity[1] === -1) return;
+          if (this.prevVelocity[1] === -1) return;
           this.velocity = [0, 1];
           break;
       }
     });
 
     setInterval(() => {
-      this.moveSnake();
+      if (this.startGame) {
+        this.moveSnake(this.velocity);
+        (this as any).prevVelocity = this.velocity;
+      }
     }, 200);
-
     this.randomAppleCoors();
   },
   methods: {
-    moveSnake() {
-      this.snakeCoords = [
-        this.snakeCoords[0] + this.velocity[0],
-        this.snakeCoords[1] + this.velocity[1]
+    moveSnake(velocity: number[]) {
+      this.snakeCoords[0] = [
+        this.snakeCoords[0][0] + velocity[0],
+        this.snakeCoords[0][1] + velocity[1]
       ];
-      if (this.snakeCoords[0] === 0) {
-        this.snakeCoords[0] = this.noTiles;
-      } else if (this.snakeCoords[0] === 20) {
-        this.snakeCoords[0] = 0;
+
+      if (this.snakeCoords[0][0] === 0) {
+        this.snakeCoords[0][0] = this.noTiles;
+      } else if (this.snakeCoords[0][0] === this.noTiles + 1) {
+        this.snakeCoords[0][0] = 1;
       }
 
-      if (this.snakeCoords[1] === 0) {
-        this.snakeCoords[1] = this.noTiles;
-      } else if (this.snakeCoords[1] === 20) {
-        this.snakeCoords[1] = 0;
+      if (this.snakeCoords[0][1] === 0) {
+        this.snakeCoords[0][1] = this.noTiles;
+      } else if (this.snakeCoords[0][1] === this.noTiles + 1) {
+        this.snakeCoords[0][1] = 1;
       }
 
-      if (
-        this.snakeCoords[0] === this.appleCoords[0] &&
-        this.snakeCoords[1] === this.appleCoords[1]
-      ) {
-        this.tile.push(this.appleCoords);
-        this.randomAppleCoors();
-      }
-
-      (this as any).path.unshift(this.snakeCoords);
-      if (this.tile.length + 3 === this.path.length) {
+      (this as any).path.unshift(this.snakeCoords[0]);
+      if (this.snakeCoords.length + 2 === this.path.length) {
         this.path.pop();
       }
 
-      // if(this.tile.length){
-      //   this.tile[0][0] = this.snakeCoords[0];
-      //   this.tile[0][1] = this.snakeCoords[1];
-      // }
+      if (this.isAppleEaten) {
+        this.snakeCoords.push(this.path[this.path.length - 1]);
+        this.isAppleEaten = false;
+      }
 
-      // console.log(this.tile[0], this.snakeCoords);
-      this.tile.forEach((tile, index) => {
-        tile[0] = this.path[index + 1][0];
-        tile[1] = this.path[index + 1][1];
+      if (
+        this.snakeCoords[0][0] === this.appleCoords[0] &&
+        this.snakeCoords[0][1] === this.appleCoords[1]
+      ) {
+        this.isAppleEaten = true;
+        this.randomAppleCoors();
+      }
+
+      this.snakeCoords.forEach((dot, index) => {
+        dot[0] = this.path[index][0];
+        dot[1] = this.path[index][1];
       });
 
-      console.log(this.tile[0], this.snakeCoords);
+      if (this.isSnake(this.snakeCoords[0][0], this.snakeCoords[0][1], true)) {
+        this.startGame = false;
+        this.gameOver = true;
+        this.velocity = [0, 0];
+        this.path = [];
+        this.snakeCoords = [];
+        this.hideButton = false;
+      }
     },
     randomAppleCoors() {
       (this.appleCoords as number[]) = [
@@ -113,13 +127,23 @@ export default {
         Math.floor(Math.random() * 20 + 1)
       ];
     },
-    tileCoords(x: number, y: number) {
-      for (let i = 0; i < this.tile.length; i++) {
-        if (this.tile[i][0] == x && this.tile[i][1] == y) {
+    isSnake(x: number, y: number, doNotCountFirst = false) {
+      for (let i = 0; i < this.snakeCoords.length; i++) {
+        if (doNotCountFirst && i === 0) {
+          continue;
+        }
+        if (this.snakeCoords[i][0] == x && this.snakeCoords[i][1] == y) {
           return true;
         }
       }
       return false;
+    },
+    onStartGame() {
+      this.startGame = true;
+      this.gameOver = false;
+      this.velocity = [-1, 0];
+      this.snakeCoords = [[10, 10]];
+      this.hideButton = true;
     }
   }
 };
