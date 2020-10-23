@@ -1,5 +1,5 @@
 <template>
-  <Snake/>
+  <Snake />
 </template>
 
 <script lang="ts">
